@@ -2,7 +2,7 @@
   "name": "webpify-images",
   "displayName": "Webpify Images",
   "description": "Convert images to WebP/AVIF/JPEG/PNG and rewrite the path references in your code",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "publisher": "phamhuuphuoc",
   "icon": "icon.png",
   "license": "MIT",
