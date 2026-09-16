@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - run: node webpify.js --self-test
+      - run: node test-extension.js
+
+  package:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            npm_flags: --os=darwin --cpu=arm64
+          - target: darwin-x64
+            npm_flags: --os=darwin --cpu=x64
+          - target: linux-x64
+            npm_flags: --os=linux --cpu=x64 --libc=glibc
+          - target: linux-arm64
+            npm_flags: --os=linux --cpu=arm64 --libc=glibc
+          - target: win32-x64
+            npm_flags: --os=win32 --cpu=x64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # sharp ships a prebuilt binary per platform, so each .vsix has to carry the
+      # right one. These flags make npm resolve the optional dep for the target,
+      # not for the runner we happen to be on.
+      - name: Install sharp for ${{ matrix.target }}
+        run: npm install --no-audit --no-fund --include=optional ${{ matrix.npm_flags }}
+
+      - name: Verify the bundled binary matches the target
+        run: |
+          ls node_modules/@img | grep -q "sharp-${{ matrix.target }}" \
+            || { echo "::error::no @img/sharp-${{ matrix.target }} in node_modules"; ls node_modules/@img; exit 1; }
+
+      - name: Package
+        run: npx --yes @vscode/vsce package --target ${{ matrix.target }} -o webpify-${{ matrix.target }}.vsix
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix-${{ matrix.target }}
+          path: '*.vsix'
+          retention-days: 14
+
+  publish:
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Publishing the wrong version is not something you can take back.
+      - name: Tag must match package.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          [ "$tag" = "$pkg" ] || { echo "::error::tag $tag != package.json $pkg"; exit 1; }
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - run: ls -la dist
+
+      - name: Publish to the VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          [ -n "$VSCE_PAT" ] || { echo "::error::VSCE_PAT secret is not set"; exit 1; }
+          npx --yes @vscode/vsce publish --packagePath dist/*.vsix
+
+      - name: Attach the .vsix files to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.vsix --generate-notes || gh release upload "$GITHUB_REF_NAME" dist/*.vsix --clobber

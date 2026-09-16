@@ -1,0 +1,93 @@
+{
+  "name": "webpify",
+  "displayName": "Webpify",
+  "description": "Convert images to WebP/AVIF/JPEG/PNG and rewrite the path references in your code",
+  "version": "1.8.0",
+  "publisher": "phuocbeyou",
+  "icon": "icon.png",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "bin": {
+    "webpify": "./webpify.js"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "webpify.convertFolder",
+        "title": "Convert & Optimize Images",
+        "category": "Webpify"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "webpify.convertFolder",
+          "when": "explorerResourceIsFolder || resourceExtname =~ /\\.(png|jpe?g|gif)$/i",
+          "group": "7_modification"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Webpify",
+      "properties": {
+        "webpify.format": {
+          "type": "string",
+          "enum": [
+            "webp",
+            "avif",
+            "jpeg",
+            "png"
+          ],
+          "enumDescriptions": [
+            "WebP — broad browser support, good compression",
+            "AVIF — smallest files, much slower to encode",
+            "JPEG — photos without transparency",
+            "PNG — lossless-ish, keeps transparency"
+          ],
+          "default": "webp",
+          "description": "Output format the preview panel starts on."
+        },
+        "webpify.quality": {
+          "type": "number",
+          "default": 80,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Quality the preview slider starts on (1-100)."
+        },
+        "webpify.skipPreview": {
+          "type": "boolean",
+          "default": false,
+          "description": "Skip the preview panel and convert straight to the format and quality above. The gear button on the image checklist opens these settings; the sliders button next to it reopens the preview for a single run."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "sharp": "^0.34.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/phuocbeyou/Webpify.git"
+  },
+  "bugs": {
+    "url": "https://github.com/phuocbeyou/Webpify/issues"
+  },
+  "homepage": "https://github.com/phuocbeyou/Webpify#readme",
+  "keywords": [
+    "webp",
+    "avif",
+    "image",
+    "optimize",
+    "compress",
+    "convert"
+  ],
+  "scripts": {
+    "test": "node webpify.js --self-test && node test-extension.js"
+  }
+}

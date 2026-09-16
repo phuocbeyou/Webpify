@@ -1,0 +1,8 @@
+.vscode/**
+*.vsix
+test-extension.js
+package-lock.json
+node_modules/.package-lock.json
+icon-variant2.png
+.github/**
+.gitignore
