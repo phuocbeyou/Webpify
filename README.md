@@ -105,8 +105,8 @@ The publish job refuses to run if the tag and `package.json` version disagree.
 
 ### One-time setup
 
-1. Create the `phuocbeyou` publisher at <https://marketplace.visualstudio.com/manage>.
-2. Create a Personal Access Token at <https://dev.azure.com> — **All accessible organizations**,
-   scope **Marketplace → Manage**.
+1. Publisher: **`phamhuuphuoc`** (must match `publisher` in `package.json`).
+2. Create a Personal Access Token at <https://dev.azure.com>, signed in as the **same Microsoft
+   account that owns the publisher** — **All accessible organizations**, scope **Marketplace → Manage**.
 3. Add it to the repository as the secret **`VSCE_PAT`**
    (Settings → Secrets and variables → Actions).

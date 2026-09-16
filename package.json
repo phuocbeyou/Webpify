@@ -3,7 +3,7 @@
   "displayName": "Webpify",
   "description": "Convert images to WebP/AVIF/JPEG/PNG and rewrite the path references in your code",
   "version": "1.8.0",
-  "publisher": "phuocbeyou",
+  "publisher": "phamhuuphuoc",
   "icon": "icon.png",
   "license": "MIT",
   "engines": {
