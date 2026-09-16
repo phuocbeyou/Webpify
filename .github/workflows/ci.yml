@@ -19,8 +19,11 @@ jobs:
       - run: node webpify.js --self-test
       - run: node test-extension.js
 
+  # Only a release needs the five platform packages. An ordinary push to main runs
+  # the tests and stops there, instead of building artefacts nothing consumes.
   package:
     needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
