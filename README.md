@@ -1,4 +1,4 @@
-# Webpify
+# Webpify Images
 
 [![CI](https://github.com/phuocbeyou/Webpify/actions/workflows/ci.yml/badge.svg)](https://github.com/phuocbeyou/Webpify/actions/workflows/ci.yml)
 
@@ -7,7 +7,8 @@ to match. Ships as both a VSCode extension (with UI) and a CLI.
 
 ## VSCode extension
 
-Install from the VS Code Marketplace, or from a `.vsix` built locally:
+Install from the VS Code Marketplace (`phamhuuphuoc.webpify-images`), or from a `.vsix`
+built locally:
 `code --install-extension webpify-darwin-arm64.vsix`
 
 Use: **right-click a folder or an image** in the Explorer → **Convert & Optimize Images**.
@@ -110,3 +111,6 @@ The publish job refuses to run if the tag and `package.json` version disagree.
    account that owns the publisher** — **All accessible organizations**, scope **Marketplace → Manage**.
 3. Add it to the repository as the secret **`VSCE_PAT`**
    (Settings → Secrets and variables → Actions).
+
+> The Marketplace requires globally unique extension names and `webpify` was already taken
+> (`buiquockhai.webpify`), hence `webpify-images`.
