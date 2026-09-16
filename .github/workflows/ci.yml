@@ -88,12 +88,24 @@ jobs:
 
       - run: ls -la dist
 
-      - name: Publish to the VS Code Marketplace
+      # Split the two failure modes apart: a bad token fails here with a clear message,
+      # so a failure in the publish step below means the packages, not the credentials.
+      - name: Verify the token can publish as this publisher
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
           [ -n "$VSCE_PAT" ] || { echo "::error::VSCE_PAT secret is not set"; exit 1; }
-          npx --yes @vscode/vsce publish --packagePath dist/*.vsix
+          publisher="$(node -p "require('./package.json').publisher")"
+          echo "Verifying the PAT against publisher '$publisher'"
+          npx --yes @vscode/vsce verify-pat "$publisher" || {
+            echo "::error::The PAT cannot publish as '$publisher'. Check that it was created by the Microsoft account that owns the publisher, with Organization = All accessible organizations and scope Marketplace -> Manage."
+            exit 1
+          }
+
+      - name: Publish to the VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx --yes @vscode/vsce publish --packagePath dist/*.vsix
 
       - name: Attach the .vsix files to the GitHub release
         env:
