@@ -111,3 +111,46 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/*.vsix --generate-notes || gh release upload "$GITHUB_REF_NAME" dist/*.vsix --clobber
+
+  publish-openvsx:
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Tag must match package.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          [ "$tag" = "$pkg" ] || { echo "::error::tag $tag != package.json $pkg"; exit 1; }
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          [ -n "$OVSX_PAT" ] || { echo "::error::OVSX_PAT secret is not set"; exit 1; }
+          ns="$(node -p "require('./package.json').publisher")"
+          # Idempotent: the namespace only needs creating once, and it already
+          # existing is not an error here. Captured rather than piped — a pipe would
+          # report tee's exit status and swallow a real failure.
+          if ! out="$(npx --yes ovsx create-namespace "$ns" -p "$OVSX_PAT" 2>&1)"; then
+            echo "$out"
+            echo "$out" | grep -qi "already exists" \
+              || { echo "::error::could not create the Open VSX namespace '$ns'"; exit 1; }
+            echo "Namespace '$ns' already exists, continuing."
+          fi
+          # One call per platform build — each .vsix carries its own target.
+          for f in dist/*.vsix; do
+            echo "::group::$f"
+            npx --yes ovsx publish "$f" -p "$OVSX_PAT"
+            echo "::endgroup::"
+          done

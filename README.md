@@ -7,8 +7,9 @@ to match. Ships as both a VSCode extension (with UI) and a CLI.
 
 ## VSCode extension
 
-Install from the VS Code Marketplace (`phamhuuphuoc.webpify-images`), or from a `.vsix`
-built locally:
+Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=phamhuuphuoc.webpify-images)
+or [Open VSX](https://open-vsx.org/extension/phamhuuphuoc/webpify-images) (VSCodium, Cursor,
+Gitpod, Theia) — `phamhuuphuoc.webpify-images` — or from a `.vsix` built locally:
 `code --install-extension webpify-darwin-arm64.vsix`
 
 Use: **right-click a folder or an image** in the Explorer → **Convert & Optimize Images**.
@@ -95,7 +96,9 @@ node test-extension.js        # 19 UI flows + dynamic-import guard
 CI builds a platform-specific `.vsix` for `darwin-arm64`, `darwin-x64`, `linux-x64`,
 `linux-arm64` and `win32-x64` — sharp ships a native binary per platform, so one universal
 package is not possible. Every push runs the tests and builds all five; pushing a `v*` tag
-also publishes them and attaches them to a GitHub release.
+publishes them to **both the VS Code Marketplace and Open VSX**, and attaches them to a
+GitHub release. The two registries publish in separate jobs, so a token problem with one
+does not obscure the other's result.
 
 ```bash
 npm version patch        # or minor / major — updates package.json
@@ -111,6 +114,14 @@ The publish job refuses to run if the tag and `package.json` version disagree.
    account that owns the publisher** — **All accessible organizations**, scope **Marketplace → Manage**.
 3. Add it to the repository as the secret **`VSCE_PAT`**
    (Settings → Secrets and variables → Actions).
+
+For Open VSX:
+
+4. Sign in at <https://open-vsx.org> with GitHub, then **sign the Eclipse Publisher Agreement**
+   from your profile — publishing is rejected until that is done.
+5. Create an access token (profile → Access Tokens) and add it as the secret **`OVSX_PAT`**.
+
+The namespace `phamhuuphuoc` is created automatically on the first publish.
 
 > The Marketplace requires globally unique extension names and `webpify` was already taken
 > (`buiquockhai.webpify`), hence `webpify-images`.
