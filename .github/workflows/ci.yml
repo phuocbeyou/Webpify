@@ -142,45 +142,51 @@ jobs:
         run: |
           [ -n "$OVSX_PAT" ] || { echo "::error::OVSX_PAT secret is not set"; exit 1; }
           ns="$(node -p "require('./package.json').publisher")"
-          # Idempotent: the namespace only needs creating once, and it already
-          # existing is not an error here. Captured rather than piped — a pipe would
-          # report tee's exit status and swallow a real failure.
-          if ! out="$(npx --yes ovsx create-namespace "$ns" -p "$OVSX_PAT" 2>&1)"; then
-            echo "$out"
-            echo "$out" | grep -qi "already exists" \
-              || { echo "::error::could not create the Open VSX namespace '$ns'"; exit 1; }
-            echo "Namespace '$ns' already exists, continuing."
-          fi
-          # One call per platform build — each .vsix carries its own target.
-          # Open VSX returns a transient 503 often enough that a single attempt left
-          # 1.8.2 published for only three of five platforms. Retry, and treat an
-          # already-published package as done so a re-run can finish the job.
-          publish_one() {
-            local f="$1" attempt out
+
+          # Open VSX returns transient 503s often enough to matter: one killed the v1.8.2
+          # publish after three of five platforms, and another killed v1.8.3 at
+          # create-namespace in 24s, before the publish retries could ever run. So every
+          # call to it goes through here.
+          # run_retry <label> <tolerated-substring> <command...>
+          run_retry() {
+            local what="$1" tolerate="$2"; shift 2
+            local attempt out
             for attempt in 1 2 3 4; do
-              if out="$(npx --yes ovsx publish "$f" -p "$OVSX_PAT" 2>&1)"; then
+              if out="$("$@" 2>&1)"; then
                 echo "$out"
                 return 0
               fi
               echo "$out"
-              if echo "$out" | grep -qi "already"; then
-                echo "  -> already on Open VSX, nothing to do"
+              if [ -n "$tolerate" ] && echo "$out" | grep -qi "$tolerate"; then
+                echo "  -> $what: already done, continuing"
                 return 0
               fi
               if [ "$attempt" -lt 4 ]; then
-                echo "  -> attempt $attempt failed, retrying in $((attempt * 15))s"
+                echo "  -> $what: attempt $attempt failed, retrying in $((attempt * 15))s"
                 sleep $((attempt * 15))
               fi
             done
-            echo "::error::could not publish $(basename "$f") after 4 attempts"
+            echo "::error::$what failed after 4 attempts"
             return 1
           }
+
+          # A plain GET needs no token and skips the write call entirely once the
+          # namespace exists, which it does after the first release.
+          if curl -sf -o /dev/null "https://open-vsx.org/api/$ns"; then
+            echo "Namespace '$ns' already exists."
+          else
+            run_retry "create-namespace" "already" \
+              npx --yes ovsx create-namespace "$ns" -p "$OVSX_PAT" || exit 1
+          fi
+
+          # One call per platform build — each .vsix carries its own target. Every
+          # package is attempted before the step fails, so one bad platform does not
+          # hide whether the others made it.
           failed=0
           for f in dist/*.vsix; do
             echo "::group::$(basename "$f")"
-            publish_one "$f" || failed=1
+            run_retry "$(basename "$f")" "already" \
+              npx --yes ovsx publish "$f" -p "$OVSX_PAT" || failed=1
             echo "::endgroup::"
           done
-          # Keep going through every package, then fail — one bad platform should not
-          # hide whether the others made it.
           [ "$failed" -eq 0 ] || { echo "::error::at least one platform failed to publish"; exit 1; }
