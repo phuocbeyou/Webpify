@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict'
 const { readdir, readFile, writeFile, stat, unlink } = require('node:fs/promises')
-const { join, relative, basename, resolve } = require('node:path')
+const { join, relative, basename, dirname, resolve, posix } = require('node:path')
 
 const IMG = /\.(png|jpe?g|gif)$/i
 const FORMATS = {
@@ -23,22 +23,41 @@ const STOP = ' \t\r\n"\'`()<>,;:*=[]{}|!?#&'
 const norm = (s) => s.replace(/\\/g, '/').replace(/^(?:[.~@]*\/)+/, '').toLowerCase()
 
 /** rels: image paths relative to the CODE root, '/'-separated — code refs are written
- *  against that root (`/img/a.png` for `public/img/a.png`), not against the image folder. */
+ *  against that root (`/img/a.png` for `public/img/a.png`), not against the image folder.
+ *  The returned matcher takes the reference plus the directory of the file it was found
+ *  in, so relative references can be resolved instead of guessed at. */
 function makeMatcher(rels) {
+  const exact = new Set()
   const byBase = new Map()
+  // An image outside the code root is keyed by filename alone (see planEdits).
+  const looseNames = new Set()
   for (const rel of rels) {
-    const b = basename(rel).toLowerCase()
+    const low = rel.toLowerCase()
+    exact.add(low)
+    if (!low.includes('/')) looseNames.add(low)
+    const b = basename(low)
     if (!byBase.has(b)) byBase.set(b, [])
-    byBase.get(b).push(rel.toLowerCase())
+    byBase.get(b).push(low)
   }
-  return (ref) => {
-    const n = norm(ref)
+  return (ref, fromDir = '') => {
+    const raw = ref.replace(/\\/g, '/')
+    // ./ and ../ resolve against the containing file, so they can be matched exactly.
+    // Suffix matching here would wrongly hit a same-named image under a parallel tree:
+    // './General/a.png' in src/assets/images/ must not match
+    // src/features/X/assets/images/General/a.png.
+    if (/^\.{1,2}\//.test(raw)) {
+      const abs = posix.normalize(posix.join(fromDir, raw)).toLowerCase()
+      return exact.has(abs) || looseNames.has(basename(abs))
+    }
+    // ponytail: an alias ('@/x'), a web-root path ('/x') or a bare filename cannot be
+    // resolved from here, so those still match by suffix.
+    const n = norm(raw)
     if (!n) return false
     return (byBase.get(basename(n)) ?? []).some((r) => r === n || r.endsWith('/' + n))
   }
 }
 
-function rewrite(text, matches, outExt = 'webp') {
+function rewrite(text, matches, outExt = 'webp', fromDir = '') {
   const target = '.' + outExt.toLowerCase()
   EXT.lastIndex = 0
   let count = 0, out = '', last = 0, m
@@ -47,7 +66,7 @@ function rewrite(text, matches, outExt = 'webp') {
     let s = m.index
     while (s > last && !STOP.includes(text[s - 1])) s--
     const ref = text.slice(s, EXT.lastIndex)
-    if (!matches(ref)) continue
+    if (!matches(ref, fromDir)) continue
     out += text.slice(last, s) + ref.slice(0, -m[0].length) + target
     last = EXT.lastIndex
     count++
@@ -103,7 +122,8 @@ async function planEdits(images, codeDir, outExt = 'webp', { onProgress, token }
     if (i % 200 === 0) onProgress?.(i, files.length)
     const f = files[i]
     if ((await stat(f)).size > 2_000_000) continue
-    const { out, count } = rewrite(await readFile(f, 'utf8'), matches, outExt)
+    const dir = dirname(relative(codeDir, f)).split('\\').join('/')
+    const { out, count } = rewrite(await readFile(f, 'utf8'), matches, outExt, dir === '.' ? '' : dir)
     if (count) edits.push({ f, out, count })
   }
   return edits
@@ -239,7 +259,7 @@ function selfTest() {
   const assert = (c, m) => { if (!c) throw new Error('FAIL: ' + m) }
   const m = makeMatcher(['public/img/hero.png', 'public/img/sub/hero.png', 'logo.JPG'])
   const cases = [
-    [`<img src="./public/img/hero.png">`, `<img src="./public/img/hero.webp">`, 1, 'relative path'],
+    [`<img src="./img/hero.png">`, `<img src="./img/hero.webp">`, 1, 'relative path'],
     [`url(/img/sub/hero.png)`, `url(/img/sub/hero.webp)`, 1, 'web-root path (public/ stripped by server)'],
     [`import a from '@/img/hero.png'`, `import a from '@/img/hero.webp'`, 1, 'alias prefix'],
     [`src="../../logo.JPG"`, `src="../../logo.webp"`, 1, 'case-insensitive ext'],
@@ -253,7 +273,7 @@ function selfTest() {
     [`"` + 'a'.repeat(200) + `.png"`, `"` + 'a'.repeat(200) + `.png"`, 0, 'long unmatched token, no backtracking'],
   ]
   for (const [input, want, n, name] of cases) {
-    const r = rewrite(input, m, 'webp')
+    const r = rewrite(input, m, 'webp', 'public')
     assert(r.out === want, `${name}: got ${r.out}`)
     assert(r.count === n, `${name}: count ${r.count} != ${n}`)
   }
@@ -265,7 +285,22 @@ function selfTest() {
   assert(toPng.out === `"/img/photo.png" "/img/hero.png"`, `png: got ${toPng.out}`)
   assert(toPng.count === 1, `png: only the jpg ref changes, got ${toPng.count}`)
 
-  console.log(`self-test ok (${cases.length + 2} cases)`)
+  // Parallel trees: './General/a.png' means a different file depending on which
+  // index.ts it sits in, so a converted image under one tree must not rewrite the
+  // reference in the other. This shipped broken in 1.8.4.
+  const par = makeMatcher(['src/features/orderstracking/assets/images/general/mascot_empty.png'])
+  const wrongTree = rewrite(`require("./General/mascot_empty.png")`, par, 'webp', 'src/assets/images')
+  assert(wrongTree.count === 0, `parallel tree: rewrote a reference it should not have: ${wrongTree.out}`)
+  const rightTree = rewrite(`require("./General/mascot_empty.png")`, par, 'webp',
+    'src/features/OrdersTracking/assets/images')
+  assert(rightTree.count === 1, 'parallel tree: failed to rewrite the reference that does point at it')
+  assert(rightTree.out === `require("./General/mascot_empty.webp")`, `got ${rightTree.out}`)
+  // '../' has to resolve too.
+  const up = rewrite(`require("../images/General/mascot_empty.png")`, par, 'webp',
+    'src/features/OrdersTracking/assets/styles')
+  assert(up.count === 1, 'parallel tree: ../ reference not resolved')
+
+  console.log(`self-test ok (${cases.length + 5} cases)`)
 }
 
 if (require.main === module) cli()

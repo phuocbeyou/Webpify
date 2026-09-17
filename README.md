@@ -104,6 +104,21 @@ node webpify.js <image-folder> [--code <code-root>]
 | `-y, --yes` | | Don't prompt: convert and rewrite, **keep** originals |
 | `-d, --delete` | | Delete originals without prompting |
 
+## Repairing references broken by 1.8.0–1.8.4
+
+Those versions matched relative references by path suffix, so in a project with two parallel
+asset trees (`src/assets/images/General/` and `src/features/X/assets/images/General/`) a
+converted image under one tree would rewrite the reference in the other — leaving code pointing
+at a `.webp` that was never written there. Fixed in 1.8.5.
+
+If you ran an affected version, this reports every reference to a missing `.webp`/`.avif` whose
+original is still on disk, and points it back:
+
+```bash
+node fix-refs.js /path/to/your/project           # report only
+node fix-refs.js /path/to/your/project --apply   # write the fixes
+```
+
 ## Development
 
 ```bash
