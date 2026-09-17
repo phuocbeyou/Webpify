@@ -1,57 +1,95 @@
 # Webpify Images
 
-[![CI](https://github.com/phuocbeyou/Webpify/actions/workflows/ci.yml/badge.svg)](https://github.com/phuocbeyou/Webpify/actions/workflows/ci.yml)
+Convert a folder of images to **WebP, AVIF, JPEG or PNG** — and rewrite every path reference
+in your code to match, in the same pass.
 
-Convert images to **WebP, AVIF, JPEG or PNG** and **rewrite the path references in your code**
-to match. Ships as both a VSCode extension (with UI) and a CLI.
+[![Marketplace](https://img.shields.io/visual-studio-marketplace/v/phamhuuphuoc.webpify-images?label=Marketplace&color=0078d4)](https://marketplace.visualstudio.com/items?itemName=phamhuuphuoc.webpify-images)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/phamhuuphuoc.webpify-images?color=0078d4)](https://marketplace.visualstudio.com/items?itemName=phamhuuphuoc.webpify-images)
+[![Open VSX](https://img.shields.io/open-vsx/v/phamhuuphuoc/webpify-images?label=Open%20VSX&color=a60ee5)](https://open-vsx.org/extension/phamhuuphuoc/webpify-images)
 
-## VSCode extension
+![Output preview](https://raw.githubusercontent.com/phuocbeyou/Webpify/main/docs/3-preview.png)
 
-Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=phamhuuphuoc.webpify-images)
-or [Open VSX](https://open-vsx.org/extension/phamhuuphuoc/webpify-images) (VSCodium, Cursor,
-Gitpod, Theia) — `phamhuuphuoc.webpify-images` — or from a `.vsix` built locally:
-`code --install-extension webpify-darwin-arm64.vsix`
+Converting images is the easy half. Updating 283 references across 9 files by hand is not, and
+a single missed one is a broken image in production. Webpify does both, and only rewrites a
+reference once the new file is actually on disk.
 
-Use: **right-click a folder or an image** in the Explorer → **Convert & Optimize Images**.
-Multi-select works: cmd/ctrl-click any mix of folders and image files and it takes them in one
-pass, de-duplicating nested selections. The Command Palette opens a picker that accepts both too.
+## Install
 
-1. **Image checklist** — everything ticked by default, sorted by file size descending,
-   with each image's path so you can tell same-named files apart. Untick what to skip, press OK.
-2. **Output preview** — original and result side by side, with a **format dropdown**
-   (WebP / AVIF / JPEG / PNG) and a **quality slider** from 50% to 95%. Each combination is
-   encoded on demand and cached, and the caption shows the resulting file size and the saving,
-   so you can see exactly what a given % costs. Press **Convert** to run, or close to cancel.
-3. Scans your code, converts, and rewrites the references (progress shown, cancellable).
-4. Final dialog: **Delete originals** / **Keep both**.
+```
+ext install phamhuuphuoc.webpify-images
+```
 
-Tick **Remember this and skip the preview next time** in the panel and step 2 disappears:
-the checklist alone converts, using the format and quality you settled on. The checklist's
-title bar then carries two buttons — ⚙ opens the settings, and the sliders button reopens
-the preview for a single run without changing them.
+Works in VS Code, and in any editor that uses Open VSX — VSCodium, Cursor, Antigravity, Gitpod, Theia.
 
-Writing the format a source file already uses (PNG → PNG) re-encodes it **in place**: no second
-file, no reference change, and no delete prompt for it.
+## How it works
 
-**An image whose output comes out no smaller is left untouched** — no file written, no reference
-rewritten. Flat GIFs and already-optimised PNGs routinely grow at high quality: a 3.5MB animated
-GIF becomes a 4.4MB WebP at 95%, because GIF's palette + LZW beats full-colour lossy on flat art.
-The preview flags this, and the Output channel lists every image left as-is.
+### 1. Right-click a folder — or a single image
 
-References are rewritten **after** the encode, from the list of files actually written, so a
-skipped or failed image never leaves your code pointing at a file that does not exist.
+![Explorer context menu](https://raw.githubusercontent.com/phuocbeyou/Webpify/main/docs/1-explorer.png)
 
-An unticked image is neither converted nor rewritten, so the code still points at the file
+Multi-select works: cmd/ctrl-click any mix of folders and image files and it takes them all in
+one pass. Nested selections are de-duplicated, so an image never shows up twice.
+
+### 2. Pick what to convert
+
+![Image checklist](https://raw.githubusercontent.com/phuocbeyou/Webpify/main/docs/2-checklist.png)
+
+Everything is ticked by default and sorted biggest first, with each image's full path so you can
+tell same-named files apart. Type to filter, untick anything you want left alone, press OK.
+
+An unticked image is **neither converted nor rewritten** — your code keeps pointing at the file
 that is actually there.
 
-Per-file details go to Output → channel **Webpify**.
+### 3. See what each quality level costs
+
+![Output preview](https://raw.githubusercontent.com/phuocbeyou/Webpify/main/docs/3-preview.png)
+
+Original and result side by side. Change the format, drag the slider, and the caption shows the
+real file size and the saving for that exact combination. No guessing what 80% means for *your*
+images.
+
+Tick **Remember this and skip the preview next time** and this step disappears — the checklist
+alone converts, using the settings you landed on. The checklist's title bar then carries two
+buttons: ⚙ opens the settings, and the sliders button reopens the preview for a single run.
+
+### 4. Keep or delete the originals
+
+![Delete or keep dialog](https://raw.githubusercontent.com/phuocbeyou/Webpify/main/docs/4-result.png)
+
+By then your code already points at the new files. Keep the originals to compare or roll back,
+or delete them and be done.
+
+## What it does that a plain converter does not
+
+- **Rewrites your code.** `import hero from '@/img/hero.png'`, `url(/img/hero.png?v=3)`,
+  `<img src=img/hero.png>` — all updated. Matching is by path suffix from the workspace root,
+  so `public/img/hero.png` matches `/img/hero.png` but never a same-named `/assets/hero.png`.
+- **Skips images that would grow.** Flat GIFs and already-optimised PNGs get *bigger* at high
+  quality — a 3.5MB animated GIF becomes a 4.4MB WebP at 95%. Those are left untouched and
+  listed in the output, instead of quietly making your site heavier.
+- **Never leaves a dangling reference.** Conversion runs first; references are rewritten only
+  for files that were actually written. A failed or skipped encode cannot break your build.
+- **Re-encodes in place when it makes sense.** Choosing PNG for a PNG source rewrites the file
+  itself — no second file, no reference change, no delete prompt.
+- **Leaves your repo alone otherwise.** `node_modules`, `.git`, `dist`, `build`, `out`,
+  `.next`, `.nuxt`, `.output`, `vendor`, `.cache` and `coverage` are never scanned.
+
+Tip: commit before a large run. It is a big diff, and `git diff` is the easiest way to review it.
+
+## Settings
+
 | Setting | Default | |
 |---|---|---|
-| `webpify.format` | `webp` | Where the preview's format dropdown starts, and what `skipPreview` uses |
-| `webpify.quality` | `80` | Where the preview's slider starts, and what `skipPreview` uses |
-| `webpify.skipPreview` | `false` | Skip the panel and convert straight to the two settings above |
+| `webpify.format` | `webp` | Format the preview starts on, and what `skipPreview` uses |
+| `webpify.quality` | `80` | Quality the slider starts on |
+| `webpify.skipPreview` | `false` | Skip the preview panel and convert straight away |
+
+Files scanned for references: `js jsx ts tsx mjs mts vue svelte astro css scss sass less html
+json md php py rb xml yaml` (files over 2MB are skipped).
 
 ## CLI
+
+The same core ships as a command line tool:
 
 ```bash
 npm install
@@ -63,65 +101,29 @@ node webpify.js <image-folder> [--code <code-root>]
 | `--code <dir>` | cwd | Where to rewrite references |
 | `-f, --format <fmt>` | `webp` | `webp`, `avif`, `jpeg` or `png` |
 | `--quality <n>` | `80` | Output quality |
-| `-y, --yes` | | Don't prompt: convert + rewrite, **keep** originals |
+| `-y, --yes` | | Don't prompt: convert and rewrite, **keep** originals |
 | `-d, --delete` | | Delete originals without prompting |
 
-## How references are matched
-
-A path is matched by **suffix relative to the code root**, so `public/img/hero.png` matches
-`/img/hero.png`, `@/img/hero.png`, `./public/img/hero.png` and `url(img/hero.png?v=3)` —
-but leaves `/assets/hero.png` (same filename, different folder) and any image you did not
-convert untouched.
-
-Scanned: `js jsx ts tsx mjs mts vue svelte astro css scss sass less html json md php py rb xml yaml`.
-Skipped: `node_modules .git dist build out .next .nuxt .output vendor .cache coverage`, files over 2MB.
-
-## Tests
+## Development
 
 ```bash
-node webpify.js --self-test   # reference-rewriting logic (14 cases)
-node test-extension.js        # 19 UI flows + dynamic-import guard
+node webpify.js --self-test   # reference-rewriting logic
+node test-extension.js        # UI flows, against a stubbed vscode module
+node docs/make-images.js      # regenerate the screenshots above
 ```
-
-## Notes
-
-- The packaged `.vsix` embeds a `sharp` native binary for the platform it was built on.
-  To share it across platforms, reinstall with `npm i --os=... --cpu=...` and repackage.
-- Matching the extension first and scanning backwards for the path is deliberate: a leading
-  `[^...]*` in the pattern backtracks quadratically on minified bundles (27.7s → 87ms on a
-  172MB tree).
-
-## Releasing
 
 CI builds a platform-specific `.vsix` for `darwin-arm64`, `darwin-x64`, `linux-x64`,
-`linux-arm64` and `win32-x64` — sharp ships a native binary per platform, so one universal
-package is not possible. Every push runs the tests and builds all five; pushing a `v*` tag
-publishes them to **both the VS Code Marketplace and Open VSX**, and attaches them to a
-GitHub release. The two registries publish in separate jobs, so a token problem with one
-does not obscure the other's result.
+`linux-arm64` and `win32-x64` — sharp ships a native binary per platform, so a single
+universal package is not possible. Pushing a `v*` tag publishes all five to both registries
+and attaches them to a GitHub release:
 
 ```bash
-npm version patch        # or minor / major — updates package.json
-git push --follow-tags   # tag v1.8.1 -> CI publishes
+npm version patch && git push --follow-tags
 ```
 
-The publish job refuses to run if the tag and `package.json` version disagree.
+Secrets required: `VSCE_PAT` (Azure DevOps, *All accessible organizations* + Marketplace →
+Manage) and `OVSX_PAT` (Open VSX, after signing the Eclipse Publisher Agreement).
 
-### One-time setup
+## License
 
-1. Publisher: **`phamhuuphuoc`** (must match `publisher` in `package.json`).
-2. Create a Personal Access Token at <https://dev.azure.com>, signed in as the **same Microsoft
-   account that owns the publisher** — **All accessible organizations**, scope **Marketplace → Manage**.
-3. Add it to the repository as the secret **`VSCE_PAT`**
-   (Settings → Secrets and variables → Actions).
-
-For Open VSX:
-
-4. Sign in at <https://open-vsx.org> with GitHub, then **sign the Eclipse Publisher Agreement**
-   from your profile — publishing is rejected until that is done.
-5. Create an access token (profile → Access Tokens) and add it as the secret **`OVSX_PAT`**.
-
-The namespace `phamhuuphuoc` is created automatically on the first publish.
-
-> The Marketplace requires globally unique extension names and `webpify` was already taken
-> (`buiquockhai.webpify`), hence `webpify-images`.
+MIT
