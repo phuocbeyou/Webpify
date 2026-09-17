@@ -152,8 +152,35 @@ jobs:
             echo "Namespace '$ns' already exists, continuing."
           fi
           # One call per platform build — each .vsix carries its own target.
+          # Open VSX returns a transient 503 often enough that a single attempt left
+          # 1.8.2 published for only three of five platforms. Retry, and treat an
+          # already-published package as done so a re-run can finish the job.
+          publish_one() {
+            local f="$1" attempt out
+            for attempt in 1 2 3 4; do
+              if out="$(npx --yes ovsx publish "$f" -p "$OVSX_PAT" 2>&1)"; then
+                echo "$out"
+                return 0
+              fi
+              echo "$out"
+              if echo "$out" | grep -qi "already"; then
+                echo "  -> already on Open VSX, nothing to do"
+                return 0
+              fi
+              if [ "$attempt" -lt 4 ]; then
+                echo "  -> attempt $attempt failed, retrying in $((attempt * 15))s"
+                sleep $((attempt * 15))
+              fi
+            done
+            echo "::error::could not publish $(basename "$f") after 4 attempts"
+            return 1
+          }
+          failed=0
           for f in dist/*.vsix; do
-            echo "::group::$f"
-            npx --yes ovsx publish "$f" -p "$OVSX_PAT"
+            echo "::group::$(basename "$f")"
+            publish_one "$f" || failed=1
             echo "::endgroup::"
           done
+          # Keep going through every package, then fail — one bad platform should not
+          # hide whether the others made it.
+          [ "$failed" -eq 0 ] || { echo "::error::at least one platform failed to publish"; exit 1; }
